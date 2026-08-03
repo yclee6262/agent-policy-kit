@@ -206,7 +206,63 @@ agent-policy-kit verify --tool gemini --live
 Live challenge 證明的是該次 session 收到規範，不代表之後所有操作都會遵循規範。
 實際程式碼仍須由測試、linter、架構檢查與人工 review 驗證。
 
-### 6. 查看目前狀態
+### 6. 驗證模型是否讀懂規範
+
+`verify --live` 只確認模型能識別 policy fingerprint 與 rule IDs。若要確認模型能否把規範
+正確套用到實際情境，執行：
+
+```bash
+agent-policy-kit evaluate --tool gemini
+```
+
+未加 `--live` 時只驗證 evaluation schema、case IDs、expected answers 及引用的 rule IDs，
+成功狀態為 `EVAL_READY`。
+
+執行實際 comprehension evaluation：
+
+```bash
+agent-policy-kit evaluate --tool gemini --live
+```
+
+流程如下：
+
+1. 先執行 delivery challenge。
+2. Delivery 成功後，才把 `.ai/evals/cases.json` 中的情境交給 agent。
+3. Agent 必須選擇決策並列出依據的 rule IDs。
+4. Evaluator 使用未放入 prompt 的 `.ai/evals/expected.json` 評分。
+5. 總分至少 90%，且 critical case 不得答錯，才算通過。
+
+Evaluation 會區分以下狀態：
+
+| 狀態 | 診斷 | 意義 |
+|---|---|---|
+| `COMPREHENSION_CONFIRMED` | 通過 | Delivery 成功且情境判斷達標 |
+| `DELIVERY_FAILED` | `delivery_failure` | Adapter、fingerprint 或載入證據失敗，尚不能判斷理解能力 |
+| `INTERPRETATION_FAILED` | `interpretation_failure` | 已收到規範，但情境決策或 rule ID 判斷錯誤 |
+| `EVAL_UNVERIFIED` | `verification_gap` | 回覆格式或 nonce 無法建立可靠證據 |
+| `EVAL_FAILED` | 執行失敗 | 外部 agent 執行錯誤或逾時 |
+
+結果保存於：
+
+```text
+.ai/results/<tool>-comprehension.json
+```
+
+`cases.json` 與 `expected.json` 會在 `init` 時產生草稿，並在 `accept` 時一同標記為
+`ACTIVE`。Repository owner 應確認情境確實符合目前規範；規範變更後也必須同步更新 eval。
+
+若 repository 是由舊版 agent-policy-kit 初始化、尚未包含 `.ai/evals/`，可以單獨建立：
+
+```bash
+agent-policy-kit evaluate --init
+
+# 人工審查 .ai/evals/cases.json 與 expected.json
+
+agent-policy-kit evaluate --accept
+agent-policy-kit evaluate --tool all
+```
+
+### 7. 查看目前狀態
 
 ```bash
 agent-policy-kit status
@@ -219,6 +275,7 @@ agent-policy-kit status
 - effective rule IDs
 - 每個工具的 adapter 狀態
 - 每個工具最近一次 verification 結果
+- 每個工具最近一次 comprehension evaluation 結果
 
 主要命令都支援 `--json`，方便後續串接 CI 或其他自動化：
 
@@ -239,6 +296,7 @@ agent-policy-kit accept
 agent-policy-kit setup --tool all
 agent-policy-kit verify --tool all
 agent-policy-kit verify --tool codex --live
+agent-policy-kit evaluate --tool codex --live
 agent-policy-kit status
 ```
 
@@ -259,6 +317,9 @@ agent-policy-kit accept [--force] [--json]
 agent-policy-kit sync [--force] [--json]
 agent-policy-kit setup --tool <tool|all> [--force] [--json]
 agent-policy-kit verify --tool <tool|all> [--live] [--json]
+agent-policy-kit evaluate --init [--force] [--json]
+agent-policy-kit evaluate --accept [--json]
+agent-policy-kit evaluate --tool <tool|all> [--live] [--json]
 agent-policy-kit status [--json]
 ```
 
@@ -275,6 +336,9 @@ agent-policy-kit status [--json]
 ├── project.json
 ├── policy-lock.json
 ├── generated-manifest.json
+├── evals/
+│   ├── cases.json
+│   └── expected.json
 └── results/
 AGENTS.md
 CLAUDE.md
@@ -321,6 +385,8 @@ npm run lint
 - 五種工具 adapter
 - generated manifest integrity
 - 靜態 verification
+- Evaluation schema、scoring 與 critical case
+- Delivery failure 與 interpretation failure 的分類
 - `AGENTS.md` 人工修改後的 drift protection
 - Gemini context 衝突
 - Claude managed block 保留既有內容
@@ -336,8 +402,8 @@ Live agent 測試需要帳號、認證且結果不具確定性，因此未放入
 - Live challenge parser 採保守判定；即使人工看起來正確，也可能標記為
   `LOAD_UNVERIFIED`。
 - 自然語言規範衝突仍需人工 review；目前只確定性阻擋重複 rule ID。
-- 目前證明的是 policy delivery。情境式理解測試、diff-aware enforcement、waiver、
-  OpenSpec gate 與 PR attestation 屬於下一階段。
+- 目前已涵蓋 policy delivery 與情境式理解測試。Diff-aware enforcement、execution
+  failure 的自動檢查、waiver、OpenSpec gate 與 PR attestation 屬於下一階段。
 
 ## 參考資料
 

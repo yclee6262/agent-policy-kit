@@ -12,6 +12,7 @@ agent-policy-kit init --org-policy /company/policies/ORG_AGENTS.md
 agent-policy-kit accept
 agent-policy-kit setup --tool all
 agent-policy-kit verify --tool all
+agent-policy-kit evaluate --tool all
 agent-policy-kit status
 ```
 
@@ -19,12 +20,18 @@ agent-policy-kit status
 
 ```text
 Status: ACTIVE
-- opencode: adapter=READY, verification=ADAPTER_READY
-- pi:       adapter=READY, verification=ADAPTER_READY
-- gemini:   adapter=READY, verification=ADAPTER_READY
-- codex:    adapter=READY, verification=ADAPTER_READY
-- claude:   adapter=READY, verification=ADAPTER_READY
+- opencode: adapter=READY, verification=ADAPTER_READY, comprehension=EVAL_READY
+- pi:       adapter=READY, verification=ADAPTER_READY, comprehension=EVAL_READY
+- gemini:   adapter=READY, verification=ADAPTER_READY, comprehension=EVAL_READY
+- codex:    adapter=READY, verification=ADAPTER_READY, comprehension=EVAL_READY
+- claude:   adapter=READY, verification=ADAPTER_READY, comprehension=EVAL_READY
 ```
 
 若要取得實際模型的 challenge 證據，需執行 `verify --live`。靜態
 `ADAPTER_READY` 不能被描述成模型已經讀取或遵循規範。
+
+若要確認模型能否把規範套用到情境，執行：
+
+```bash
+agent-policy-kit evaluate --tool gemini --live
+```

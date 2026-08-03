@@ -1,6 +1,9 @@
 import {
   SUPPORTED_TOOLS,
+  acceptEvaluationSuite,
   acceptProposal,
+  evaluateTool,
+  initEvaluationSuite,
   initProject,
   projectStatus,
   repositoryRoot,
@@ -11,17 +14,20 @@ import {
 
 const HELP = `agent-policy-kit
 
-Generate, distribute, and verify repository policies across AI coding agents.
+為不同 AI coding agent 產生、分發並驗證同一套 repository 規範。
 
-Usage:
+用法：
   agent-policy-kit init [--agent <tool>] [--org-policy <file>] [--force] [--json]
   agent-policy-kit accept [--force] [--json]
   agent-policy-kit sync [--force] [--json]
   agent-policy-kit setup --tool <tool|all> [--force] [--json]
   agent-policy-kit verify --tool <tool|all> [--live] [--json]
+  agent-policy-kit evaluate --init [--force] [--json]
+  agent-policy-kit evaluate --accept [--json]
+  agent-policy-kit evaluate --tool <tool|all> [--live] [--json]
   agent-policy-kit status [--json]
 
-Supported tools: ${SUPPORTED_TOOLS.join(", ")}
+支援工具：${SUPPORTED_TOOLS.join(", ")}
 `;
 
 function parseArgs(args) {
@@ -47,7 +53,7 @@ function printHuman(command, result) {
     process.stdout.write(`Policy fingerprint: ${result.policy_fingerprint || "none"}\n`);
     process.stdout.write(`Rules: ${result.effective_rule_ids.join(", ") || "none"}\n`);
     for (const [tool, value] of Object.entries(result.tools)) {
-      process.stdout.write(`- ${tool}: adapter=${value.adapter}, verification=${value.verification}\n`);
+      process.stdout.write(`- ${tool}: adapter=${value.adapter}, verification=${value.verification}, comprehension=${value.comprehension}\n`);
     }
     return;
   }
@@ -79,6 +85,11 @@ export async function main(argv) {
     result = setupTool(root, requiredTool(options), options);
   } else if (command === "verify") {
     result = verifyTool(root, requiredTool(options), options);
+  } else if (command === "evaluate") {
+    if (options.init && options.accept) throw new Error("--init 和 --accept 不可同時使用。");
+    if (options.init) result = initEvaluationSuite(root, options);
+    else if (options.accept) result = acceptEvaluationSuite(root);
+    else result = evaluateTool(root, requiredTool(options), options);
   } else if (command === "status") {
     result = projectStatus(root);
   } else {
