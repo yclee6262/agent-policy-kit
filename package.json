@@ -1,6 +1,6 @@
 {
   "name": "agent-policy-kit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Generate, distribute, and verify repository policies across AI coding agents.",
   "type": "module",
   "bin": {
@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "test": "node --test",
-    "lint": "node --check bin/agent-policy-kit.js && node --check src/cli.js && node --check src/core.js"
+    "lint": "node --check bin/agent-policy-kit.js && node --check src/cli.js && node --check src/core.js && node --check src/checks.js"
   },
   "engines": {
     "node": ">=18"

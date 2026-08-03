@@ -25,3 +25,21 @@ test("CLI fails clearly when --tool is missing", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /--tool/);
 });
+
+test("CLI exits with status 2 when a blocker check fails", async (context) => {
+  const root = mkdtempSync(join(tmpdir(), "agent-policy-kit-cli-check-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  execFileSync("git", ["init", "-q"], { cwd: root });
+  execFileSync("git", ["config", "user.email", "tests@example.invalid"], { cwd: root });
+  execFileSync("git", ["config", "user.name", "agent-policy-kit tests"], { cwd: root });
+  execFileSync(process.execPath, ["-e", "require('fs').writeFileSync('README.md', '# Demo\\n')"], { cwd: root });
+  execFileSync("git", ["add", "README.md"], { cwd: root });
+  execFileSync("git", ["commit", "-qm", "baseline"], { cwd: root });
+  execFileSync(process.execPath, [binary, "init", "--json"], { cwd: root });
+  execFileSync(process.execPath, [binary, "accept", "--json"], { cwd: root });
+  execFileSync(process.execPath, ["-e", "require('fs').writeFileSync('secret.pem', '-----BEGIN PRIVATE KEY-----\\n')"], { cwd: root });
+
+  const result = spawnSync(process.execPath, [binary, "check", "--diff", "HEAD", "--json"], { cwd: root, encoding: "utf8" });
+  assert.equal(result.status, 2);
+  assert.equal(JSON.parse(result.stdout).status, "BLOCKED");
+});

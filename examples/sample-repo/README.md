@@ -13,6 +13,7 @@ agent-policy-kit accept
 agent-policy-kit setup --tool all
 agent-policy-kit verify --tool all
 agent-policy-kit evaluate --tool all
+agent-policy-kit check --diff HEAD~1
 agent-policy-kit status
 ```
 
@@ -35,3 +36,11 @@ Status: ACTIVE
 ```bash
 agent-policy-kit evaluate --tool gemini --live
 ```
+
+若要檢查實際 diff 是否違反 blocker 或 warning 規範：
+
+```bash
+agent-policy-kit check --diff HEAD~1 --tool gemini
+```
+
+Blocker 失敗時命令會回傳 exit code 2，結果寫入 `.ai/results/latest-check.json`。

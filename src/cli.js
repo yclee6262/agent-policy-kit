@@ -11,6 +11,7 @@ import {
   syncProject,
   verifyTool,
 } from "./core.js";
+import { acceptCheckSuite, initCheckSuite, runPolicyChecks } from "./checks.js";
 
 const HELP = `agent-policy-kit
 
@@ -25,6 +26,9 @@ const HELP = `agent-policy-kit
   agent-policy-kit evaluate --init [--force] [--json]
   agent-policy-kit evaluate --accept [--json]
   agent-policy-kit evaluate --tool <tool|all> [--live] [--json]
+  agent-policy-kit check --init [--force] [--json]
+  agent-policy-kit check --accept [--json]
+  agent-policy-kit check --diff <git-ref> [--tool <tool>] [--dry-run] [--json]
   agent-policy-kit status [--json]
 
 支援工具：${SUPPORTED_TOOLS.join(", ")}
@@ -55,6 +59,7 @@ function printHuman(command, result) {
     for (const [tool, value] of Object.entries(result.tools)) {
       process.stdout.write(`- ${tool}: adapter=${value.adapter}, verification=${value.verification}, comprehension=${value.comprehension}\n`);
     }
+    process.stdout.write(`Policy check: ${result.policy_check.status}${result.policy_check.diagnosis ? ` (${result.policy_check.diagnosis})` : ""}\n`);
     return;
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -90,6 +95,11 @@ export async function main(argv) {
     if (options.init) result = initEvaluationSuite(root, options);
     else if (options.accept) result = acceptEvaluationSuite(root);
     else result = evaluateTool(root, requiredTool(options), options);
+  } else if (command === "check") {
+    if (options.init && options.accept) throw new Error("--init 和 --accept 不可同時使用。");
+    if (options.init) result = initCheckSuite(root, options);
+    else if (options.accept) result = acceptCheckSuite(root);
+    else result = runPolicyChecks(root, options);
   } else if (command === "status") {
     result = projectStatus(root);
   } else {
@@ -97,4 +107,5 @@ export async function main(argv) {
   }
   if (options.json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else printHuman(command, result);
+  if (command === "check" && result.status === "BLOCKED") process.exitCode = 2;
 }

@@ -1,5 +1,16 @@
 # 變更紀錄
 
+## 0.3.0
+
+- 新增 `check --diff <git-ref>`，依 Git diff 執行已核准的 deterministic checks。
+- 新增 `.ai/checks.json` 與 `check --init`、`check --accept` 審查流程。
+- 內建 generated policy integrity 與高信心 secret diff 檢查，並納入 untracked files。
+- 支援以 argv array 執行 repository test、lint、typecheck 與 build，不透過 shell。
+- Blocker 失敗時 CLI 使用 exit code 2；warning 會回報但不阻擋。
+- 只有 matching policy fingerprint 已通過 comprehension，產物違規才標記為 `execution_failure`。
+- Check 設定或 policy fingerprint 變更後必須重新核准。
+- Check report 只保存命令輸出 hash，不保存可能包含敏感資訊的完整 stdout/stderr。
+
 ## 0.2.0
 
 - 新增 `evaluate --tool <tool> --live`，驗證 agent 是否能把規範套用到具體情境。

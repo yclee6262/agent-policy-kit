@@ -96,6 +96,9 @@ agent-policy-kit init --org-policy /path/to/ORG_AGENTS.md
 
 ```text
 .ai/REPO_AGENTS.proposed.md
+.ai/evals/cases.json
+.ai/evals/expected.json
+.ai/checks.json
 ```
 
 每條規範應具備：
@@ -106,6 +109,8 @@ agent-policy-kit init --org-policy /path/to/ORG_AGENTS.md
 - repository 內的證據來源
 - 驗證方式
 - 違反後的修復方式
+- Check command、severity 與適用範圍是否正確
+- Evaluation 情境與 expected answer 是否符合規範
 
 移除無法確認的推測，或清楚標記需要 owner 確認。完成後執行：
 
@@ -262,7 +267,83 @@ agent-policy-kit evaluate --accept
 agent-policy-kit evaluate --tool all
 ```
 
-### 7. 查看目前狀態
+### 7. 驗證實際產物是否遵循規範
+
+Delivery 與 comprehension 通過後，仍需檢查實際 diff。`init` 會根據有效 rules 與
+repository scripts 產生：
+
+```text
+.ai/checks.json
+```
+
+新 repository 在執行主要 `accept` 時會一併核准 checks。若是舊版已初始化的
+repository，可以單獨建立：
+
+```bash
+agent-policy-kit check --init
+
+# 人工審查 .ai/checks.json
+
+agent-policy-kit check --accept
+```
+
+執行 diff-aware checks：
+
+```bash
+agent-policy-kit check --diff HEAD~1
+```
+
+`--diff` 接受可解析為 commit 的 Git ref。檢查範圍包含該 commit 到目前 working tree 的
+tracked diff，也包含未被 `.gitignore` 排除的 untracked files。
+
+若要在不執行 repository command 的情況下先查看執行計畫：
+
+```bash
+agent-policy-kit check --diff HEAD~1 --dry-run
+```
+
+目前支援的 checks：
+
+| 類型 | 行為 |
+|---|---|
+| `policy-integrity` | 驗證 generated `AGENTS.md` 與 manifest hash |
+| `secret-diff` | 掃描新增內容中的 private key、AWS access key 與 GitHub token 高信心格式 |
+| `command` | 依 argv array 執行 test、lint、typecheck 或 build，不透過 shell |
+
+`checks.json` 的每個 check 都包含 rule mapping、severity、`when` glob、執行方式與 timeout。
+修改命令、嚴重度或其他 check 內容後，必須重新執行 `check --accept`。Policy fingerprint
+改變後也必須重新確認 checks 仍然適用。
+
+結果狀態：
+
+| 狀態 | 行為 |
+|---|---|
+| `PASSED` | 所有適用 checks 通過 |
+| `WARNINGS` | Warning check 失敗，但不阻擋；CLI exit code 維持 0 |
+| `BLOCKED` | 至少一個 blocker 失敗；CLI exit code 為 2 |
+| `PLANNED` | 使用 `--dry-run`，repository commands 尚未執行 |
+
+若指定工具：
+
+```bash
+agent-policy-kit check --diff HEAD~1 --tool gemini
+```
+
+只有該工具針對相同 policy fingerprint 已得到 `COMPREHENSION_CONFIRMED`，而 blocker
+仍失敗時，診斷才會是 `execution_failure`。沒有理解證據時只會標記
+`artifact_nonconformance`，不會武斷宣稱是 AI 執行失敗。
+
+結果保存於：
+
+```text
+.ai/results/latest-check.json
+```
+
+報告會保存 command、exit code、duration 與輸出 hash，不保存完整 stdout/stderr 或偵測到
+的 secret 值。內建 secret regex 只是 MVP 的高信心檢查，正式環境仍應搭配 gitleaks、
+GitHub secret scanning 或公司既有掃描器。
+
+### 8. 查看目前狀態
 
 ```bash
 agent-policy-kit status
@@ -276,6 +357,7 @@ agent-policy-kit status
 - 每個工具的 adapter 狀態
 - 每個工具最近一次 verification 結果
 - 每個工具最近一次 comprehension evaluation 結果
+- 最近一次 policy check 狀態與診斷
 
 主要命令都支援 `--json`，方便後續串接 CI 或其他自動化：
 
@@ -297,6 +379,7 @@ agent-policy-kit setup --tool all
 agent-policy-kit verify --tool all
 agent-policy-kit verify --tool codex --live
 agent-policy-kit evaluate --tool codex --live
+agent-policy-kit check --diff HEAD~1 --tool codex
 agent-policy-kit status
 ```
 
@@ -320,6 +403,9 @@ agent-policy-kit verify --tool <tool|all> [--live] [--json]
 agent-policy-kit evaluate --init [--force] [--json]
 agent-policy-kit evaluate --accept [--json]
 agent-policy-kit evaluate --tool <tool|all> [--live] [--json]
+agent-policy-kit check --init [--force] [--json]
+agent-policy-kit check --accept [--json]
+agent-policy-kit check --diff <git-ref> [--tool <tool>] [--dry-run] [--json]
 agent-policy-kit status [--json]
 ```
 
@@ -336,6 +422,7 @@ agent-policy-kit status [--json]
 ├── project.json
 ├── policy-lock.json
 ├── generated-manifest.json
+├── checks.json
 ├── evals/
 │   ├── cases.json
 │   └── expected.json
@@ -387,6 +474,10 @@ npm run lint
 - 靜態 verification
 - Evaluation schema、scoring 與 critical case
 - Delivery failure 與 interpretation failure 的分類
+- Diff-aware blocker／warning checks 與 CLI exit code
+- Tracked 與 untracked secret detection
+- Matching comprehension evidence 下的 execution failure 分類
+- Checks 或 policy 變更後要求重新核准
 - `AGENTS.md` 人工修改後的 drift protection
 - Gemini context 衝突
 - Claude managed block 保留既有內容
@@ -402,8 +493,9 @@ Live agent 測試需要帳號、認證且結果不具確定性，因此未放入
 - Live challenge parser 採保守判定；即使人工看起來正確，也可能標記為
   `LOAD_UNVERIFIED`。
 - 自然語言規範衝突仍需人工 review；目前只確定性阻擋重複 rule ID。
-- 目前已涵蓋 policy delivery 與情境式理解測試。Diff-aware enforcement、execution
-  failure 的自動檢查、waiver、OpenSpec gate 與 PR attestation 屬於下一階段。
+- 目前已涵蓋 policy delivery、情境式理解測試與第一版 diff-aware enforcement。
+  Waiver、OpenSpec gate、PR attestation、第三方 checker plugin 與中央 policy update PR
+  屬於下一階段。
 
 ## 參考資料
 
