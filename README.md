@@ -60,7 +60,7 @@ confidence 與 path scope，因此同一個 monorepo 可以同時包含多種語
 
 工具只會根據明確證據產生命令。例如只有看到一般 `pyproject.toml`，但沒有 pytest、
 tox 或 nox 證據時，不會猜測 test runner。所有自動命令仍必須由 repository owner 在
-`.ai/checks.json` 中審查後才能啟用。
+整合審查頁 `.ai/REVIEW.md` 中確認後才能啟用。
 
 ## 開發版本安裝
 
@@ -92,8 +92,9 @@ agent-policy-kit init
 
 1. 確認目前位置是 Git repository 根目錄。
 2. 建立 `.ai/`、釘選的組織規範、專案資訊及 repository inventory。
-3. 依可觀察到的 repository 資訊建立 `.ai/REPO_AGENTS.proposed.md`。
-4. 將專案標記為 `NEEDS_REVIEW`，等待 repository owner 審查。
+3. 依可觀察到的 repository 資訊建立 repo 規範、evaluation 與 checks 草稿。
+4. 將所有待審內容彙整到唯一需要完整閱讀的 `.ai/REVIEW.md`。
+5. 將專案標記為 `NEEDS_REVIEW`，等待 repository owner 審查。
 
 預設提案由確定性掃描產生，不需要 AI 工具。如果要讓已安裝的 agent 根據 inventory
 協助改寫草稿，必須明確指定：
@@ -115,13 +116,18 @@ agent-policy-kit init --org-policy /path/to/ORG_AGENTS.md
 
 ### 2. 審查並接受 repository 規範
 
-人工審查：
+一般情況只需要打開一個檔案：
 
 ```text
-.ai/REPO_AGENTS.proposed.md
-.ai/evals/cases.json
-.ai/evals/expected.json
-.ai/checks.json
+.ai/REVIEW.md
+```
+
+此頁會完整呈現組織規範、repository 規範提案、ecosystem 與命令偵測、evaluation
+題目與預期答案、checks，以及 owner 核准清單。JSON 與原始 Markdown 仍是機器可執行
+來源，但不必逐一打開。若在來源檔修正內容，重新整理整合頁：
+
+```bash
+agent-policy-kit review
 ```
 
 每條規範應具備：
@@ -142,7 +148,9 @@ agent-policy-kit accept
 ```
 
 此命令會建立 `.ai/REPO_AGENTS.md`，並產生有效的根目錄 `AGENTS.md`。若 canonical
-規範已存在，預設不會覆寫；只有在人工確認後才能使用 `--force`。
+規範已存在，預設不會覆寫；只有在人工確認後才能使用 `--force`。`accept` 會驗證
+`.ai/REVIEW.md` 與所有來源 digest；任一檔案在審查頁產生後被修改，都必須先重新執行
+`review` 並再次審查，避免接受過期內容。
 
 ### 3. 產生或修復工具 adapter
 
@@ -284,7 +292,7 @@ Evaluation 會區分以下狀態：
 ```bash
 agent-policy-kit evaluate --init
 
-# 人工審查 .ai/evals/cases.json 與 expected.json
+# 執行 agent-policy-kit review，並審查 .ai/REVIEW.md
 
 agent-policy-kit evaluate --accept
 agent-policy-kit evaluate --tool all
@@ -305,7 +313,7 @@ repository，可以單獨建立：
 ```bash
 agent-policy-kit check --init
 
-# 人工審查 .ai/checks.json
+# 執行 agent-policy-kit review，並審查 .ai/REVIEW.md
 
 agent-policy-kit check --accept
 ```
@@ -395,7 +403,8 @@ cd /path/to/target-repo
 
 agent-policy-kit init
 
-# 人工審查 .ai/REPO_AGENTS.proposed.md
+# 只需完整審查這一份整合頁
+# .ai/REVIEW.md
 
 agent-policy-kit accept
 agent-policy-kit setup --tool all
@@ -419,6 +428,7 @@ agent-policy-kit 目前負責產生、傳遞與驗證規範，不會包住整個
 
 ```text
 agent-policy-kit init [--agent <tool>] [--org-policy <file>] [--force] [--json]
+agent-policy-kit review [--json]
 agent-policy-kit accept [--force] [--json]
 agent-policy-kit sync [--force] [--json]
 agent-policy-kit setup --tool <tool|all> [--force] [--json]
@@ -438,6 +448,9 @@ agent-policy-kit status [--json]
 
 ```text
 .ai/
+├── REVIEW.md
+├── review-manifest.json
+├── review-acceptance.json
 ├── ORG_AGENTS.md
 ├── REPO_AGENTS.proposed.md
 ├── REPO_AGENTS.md
@@ -456,6 +469,8 @@ CLAUDE.md
 ```
 
 `.ai/ORG_AGENTS.md` 和 `.ai/REPO_AGENTS.md` 是 canonical 規範來源。
+`.ai/REVIEW.md` 是自動產生的人類審查頁，不應直接修改；`review-manifest.json` 記錄
+其來源完整性，`review-acceptance.json` 記錄接受前後的 digest。
 `AGENTS.md` 是完全自動產生的檔案，不應手動修改。`CLAUDE.md` 和 Gemini settings
 只管理特定區塊或欄位，其他既有設定會盡量保留。
 

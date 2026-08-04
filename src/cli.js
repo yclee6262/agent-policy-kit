@@ -6,6 +6,7 @@ import {
   initEvaluationSuite,
   initProject,
   projectStatus,
+  reviewProject,
   repositoryRoot,
   setupTool,
   syncProject,
@@ -19,6 +20,7 @@ const HELP = `agent-policy-kit
 
 用法：
   agent-policy-kit init [--agent <tool>] [--org-policy <file>] [--force] [--json]
+  agent-policy-kit review [--json]
   agent-policy-kit accept [--force] [--json]
   agent-policy-kit sync [--force] [--json]
   agent-policy-kit setup --tool <tool|all> [--force] [--json]
@@ -60,6 +62,7 @@ function printHuman(command, result) {
       process.stdout.write(`- ${tool}: adapter=${value.adapter}, verification=${value.verification}, comprehension=${value.comprehension}\n`);
     }
     process.stdout.write(`Policy check: ${result.policy_check.status}${result.policy_check.diagnosis ? ` (${result.policy_check.diagnosis})` : ""}\n`);
+    process.stdout.write(`Review packet: ${result.review.status} (${result.review.review})\n`);
     return;
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -84,6 +87,8 @@ export async function main(argv) {
     result = initProject(root, options);
   } else if (command === "accept") {
     result = acceptProposal(root, options);
+  } else if (command === "review") {
+    result = reviewProject(root);
   } else if (command === "sync") {
     result = syncProject(root, options);
   } else if (command === "setup") {

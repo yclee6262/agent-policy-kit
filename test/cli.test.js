@@ -14,6 +14,9 @@ test("CLI exposes JSON lifecycle output", async (context) => {
   execFileSync("git", ["init", "-q"], { cwd: root });
   const init = JSON.parse(execFileSync(process.execPath, [binary, "init", "--json"], { cwd: root, encoding: "utf8" }));
   assert.equal(init.status, "NEEDS_REVIEW");
+  assert.equal(init.review, ".ai/REVIEW.md");
+  const review = JSON.parse(execFileSync(process.execPath, [binary, "review", "--json"], { cwd: root, encoding: "utf8" }));
+  assert.equal(review.review, ".ai/REVIEW.md");
   const accept = JSON.parse(execFileSync(process.execPath, [binary, "accept", "--json"], { cwd: root, encoding: "utf8" }));
   assert.equal(accept.status, "ACCEPTED");
   const status = JSON.parse(execFileSync(process.execPath, [binary, "status", "--json"], { cwd: root, encoding: "utf8" }));

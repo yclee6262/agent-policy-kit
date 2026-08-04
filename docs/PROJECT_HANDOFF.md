@@ -1,7 +1,7 @@
 # Agent Policy Kit 專案背景與開發交接
 
 更新日期：2026-08-04
-目前版本：`0.4.0`
+目前版本：`0.5.0`
 目前主要分支：`main`
 
 > 這是一份提供給接手開發的 AI 助手閱讀的專案背景文件，不是使用者操作手冊。
@@ -197,6 +197,17 @@ Organization rule 使用 `ORG-*`，repository rule 使用 `REPO-*`。Organizatio
 - 不同 ecosystem command 只在對應 path 發生變更時執行。
 - 保留舊版 `package` inventory 與單一 root Node.js check IDs。
 
+### Version 0.5.0：Integrated review packet
+
+已完成：
+
+- `init` 自動產生唯一需要完整閱讀的 `.ai/REVIEW.md`。
+- 審查頁整合 organization policy、repo proposal、ecosystem 掃描、evaluations 與 checks。
+- `review` command 可在修正機器來源後重新產生審查頁。
+- Review manifest 保存來源與審查頁 SHA-256，`accept` 拒絕 stale 或被直接修改的內容。
+- Review acceptance 保存接受前與接受後 digest，區分合法啟用轉換與後續人工 drift。
+- `status` 顯示 review packet 的 current、stale、modified、missing 或 accepted 狀態。
+
 ## 七、目前程式架構
 
 | 檔案 | 主要責任 |
@@ -205,6 +216,7 @@ Organization rule 使用 `ORG-*`，repository rule 使用 `REPO-*`。Organizatio
 | `src/cli.js` | 參數解析、command routing、輸出與 exit code |
 | `src/core.js` | Repository inventory、policy、adapters、delivery、comprehension、status |
 | `src/checks.js` | Check schema、Git diff、builtins、command execution、execution diagnosis |
+| `src/review.js` | 單一審查頁、來源 digest、drift 驗證與接受證據 |
 | `src/ecosystems/` | 各語言 detector、manifest evidence、commands、cwd 與 path scope |
 | `templates/default-org-policy.md` | 預設 organization policy |
 | `templates/repo-policy-proposal.md` | Repository policy 提案範本 |
@@ -228,9 +240,9 @@ Organization rule 使用 `ORG-*`，repository rule 使用 `REPO-*`。Organizatio
 建立本文件前確認：
 
 ```text
-Current version: 0.4.0
-Tests: 23 passed, 0 failed
-Multi-language changes may still be uncommitted; verify with git status and git log.
+Current version: 0.5.0
+Tests: run the full suite and use the latest result as the source of truth.
+Multi-language support is committed; integrated review work must be verified with git status and git log.
 ```
 
 如果實際 repository 狀態不同，應以目前 checkout、Git history 與測試結果為準。
@@ -251,7 +263,7 @@ Multi-language changes may still be uncommitted; verify with git status and git 
 
 ## 十、下一階段目標：PR Attestation
 
-下一個建議版本為 `0.5.0`。目標是把目前分散的證據整合為一份可供 CI 與 reviewer
+下一個建議版本為 `0.6.0`。目標是把目前分散的執行證據整合為一份可供 CI 與 reviewer
 判讀的 attestation。
 
 ### Attestation 應整合的資訊
@@ -319,7 +331,7 @@ test/attestation.test.js
 - Machine-readable schema 穩定。
 - 有完整正反測試。
 - README 與 CHANGELOG 更新。
-- 版本提升到 `0.5.0`。
+- 版本提升到 `0.6.0`。
 
 ## 十一、後續 roadmap
 
@@ -362,6 +374,7 @@ Canonical policy
 → Comprehension evaluation
 → Diff-aware deterministic checks
 → Multi-language ecosystem detection
+→ Integrated single-file review packet
 ```
 
 下一步要完成：

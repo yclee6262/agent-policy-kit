@@ -1,5 +1,13 @@
 # 變更紀錄
 
+## 0.5.0
+
+- 新增 `.ai/REVIEW.md`，將組織規範、repo 提案、ecosystem 掃描、evaluation 與 checks 整合為單一人類審查頁。
+- 新增 `agent-policy-kit review`，可在修正底層來源後重新產生整合審查頁。
+- 新增 review manifest，保存每個來源檔與整合頁的 SHA-256，防止接受過期或被直接修改的審查內容。
+- `accept` 現在要求整合審查頁為 current，並記錄接受前後的來源 digest。
+- `status` 新增 `CURRENT`、`STALE`、`MODIFIED`、`MISSING` 或 `ACCEPTED` review 狀態。
+
 ## 0.4.0
 
 - 新增 ecosystem detector registry，正式支援 Node.js、Python、Go、Rust、Java Maven、Java Gradle 與 .NET 專案。

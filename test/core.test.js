@@ -13,6 +13,7 @@ import {
   initEvaluationSuite,
   initProject,
   projectStatus,
+  reviewProject,
   setupTool,
   scoreEvaluation,
   syncProject,
@@ -44,6 +45,11 @@ test("initializes, accepts, configures, and statically verifies all tools", asyn
   assert.equal(initialized.status, "NEEDS_REVIEW");
   assert.equal(initialized.agent_generation.status, "NOT_REQUESTED");
   assert.match(readFileSync(join(root, ".ai/REPO_AGENTS.proposed.md"), "utf8"), /REPO-TEST-001/);
+  const review = readFileSync(join(root, ".ai/REVIEW.md"), "utf8");
+  assert.match(review, /組織層規範/);
+  assert.match(review, /Repository 規範提案/);
+  assert.match(review, /規範理解 Evaluation/);
+  assert.match(review, /自動化 Checks/);
 
   const accepted = acceptProposal(root);
   assert.equal(accepted.status, "ACCEPTED");
@@ -68,6 +74,31 @@ test("initializes, accepts, configures, and statically verifies all tools", asyn
   assert.ok(status.effective_rule_ids.includes("ORG-SAFE-001"));
   assert.ok(status.effective_rule_ids.includes("REPO-TEST-001"));
   assert.equal(status.tools.gemini.comprehension, "EVAL_READY");
+  assert.equal(status.review.status, "ACCEPTED");
+});
+
+test("requires a refreshed integrated review after a machine source changes", async (context) => {
+  const root = await repository({ "README.md": "# Demo\n" });
+  context.after(() => rm(root, { recursive: true, force: true }));
+  initProject(root);
+  const proposalPath = join(root, ".ai", "REPO_AGENTS.proposed.md");
+  writeFileSync(proposalPath, `${readFileSync(proposalPath, "utf8")}\nOwner reviewed this note.\n`, "utf8");
+  assert.equal(projectStatus(root).review.status, "STALE");
+  assert.throws(() => acceptProposal(root), /agent-policy-kit review/);
+  const refreshed = reviewProject(root);
+  assert.equal(refreshed.status, "NEEDS_REVIEW");
+  assert.equal(projectStatus(root).review.status, "CURRENT");
+  assert.equal(acceptProposal(root).status, "ACCEPTED");
+});
+
+test("rejects a manually edited generated review page", async (context) => {
+  const root = await repository({ "README.md": "# Demo\n" });
+  context.after(() => rm(root, { recursive: true, force: true }));
+  initProject(root);
+  const path = join(root, ".ai", "REVIEW.md");
+  writeFileSync(path, `${readFileSync(path, "utf8")}manual edit\n`, "utf8");
+  assert.equal(projectStatus(root).review.status, "MODIFIED");
+  assert.throws(() => acceptProposal(root), /MODIFIED/);
 });
 
 test("scores comprehension answers and identifies critical interpretation failures", () => {
