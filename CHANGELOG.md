@@ -1,5 +1,18 @@
 # 變更紀錄
 
+## 0.6.0
+
+- `init --agent <tool>` 新增 evidence-based proposal，不再只把 inventory 與確定性草稿交給 agent 改寫。
+- 新增安全 evidence collector，只抽樣 Git tracked 的設定、文件、代表性原始碼與測試。
+- 排除敏感檔名、憑證副檔名、binary、generated、vendor 與大型檔案，並限制單檔、總字元及檔案數。
+- 對 private key、AWS access key、GitHub token 與常見 secret assignment 執行高信心遮罩。
+- `.ai/evidence/repository-profile.json` 只保存路徑、分類、hash、大小與遮罩統計，不保存原始碼摘錄。
+- Proposal agent 從暫存空 Git repository 啟動，避免 CLI 自然掃描目標 repository；高風險環境仍需外部 sandbox。
+- AI 新增的 coding style 或架構規範必須引用實際 evidence、提供 confidence 與正反例，且不得直接標記為 `MUST`。
+- Agent 若刪除 deterministic rules、引用不存在檔案或輸出不合契約，系統會保留 deterministic proposal 並標記 `UNVERIFIED_OUTPUT`。
+- 依 AI 候選規範的 non-compliant example 產生待 owner 審查的 comprehension cases。
+- `.ai/REVIEW.md` 新增 proposal agent 狀態、evidence 選檔、截斷、遮罩與安全警告摘要。
+
 ## 0.5.0
 
 - 新增 `.ai/REVIEW.md`，將組織規範、repo 提案、ecosystem 掃描、evaluation 與 checks 整合為單一人類審查頁。
@@ -7,6 +20,7 @@
 - 新增 review manifest，保存每個來源檔與整合頁的 SHA-256，防止接受過期或被直接修改的審查內容。
 - `accept` 現在要求整合審查頁為 current，並記錄接受前後的來源 digest。
 - `status` 新增 `CURRENT`、`STALE`、`MODIFIED`、`MISSING` 或 `ACCEPTED` review 狀態。
+- README 新增目前功能矩陣與情境式操作方式，並新增 `docs/WORKING_LOGIC.md` 說明完整資料流與判定邏輯。
 
 ## 0.4.0
 

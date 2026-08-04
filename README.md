@@ -31,6 +31,39 @@ CLAUDE.md      .gemini/settings.json
 Markdown 只能引導模型行為，不是安全邊界。Secrets、破壞性命令、受保護路徑及合併
 限制仍應由權限、sandbox、hooks、靜態檢查與 CI 強制執行。
 
+## 目前功能列表
+
+目前版本為 `0.6.0`。下表只列出程式與測試已具備的能力；尚未完成的 roadmap 不會標示為
+可用。
+
+| 功能 | 目前狀態 | 說明 |
+|---|---|---|
+| 組織與 repo 雙層規範 | 可用 | `.ai/ORG_AGENTS.md` 與 `.ai/REPO_AGENTS.md` 為 canonical source |
+| 新 repo 初始化 | 可用 | 掃描 repository，建立 inventory、repo 規範提案、evaluations、checks 與審查頁 |
+| Evidence-based AI proposal | 可用，需外部工具 | 安全抽樣 tracked 設定、文件、程式與測試，讓 agent 提出附證據的 coding style／架構候選規範 |
+| 單一整合審查頁 | 可用 | 只需完整閱讀 `.ai/REVIEW.md`，不必逐一開啟所有 JSON 與 Markdown |
+| 審查內容防漂移 | 可用 | 以來源 digest、review manifest 與 acceptance evidence 防止接受過期內容 |
+| 多語言／monorepo 偵測 | 可用 | Node.js、Python、Go、Rust、Java Maven／Gradle、.NET，可辨識多個子專案 |
+| Repository command 建議 | 可用 | 只根據 manifest、wrapper、設定或 script 等明確證據產生，不臆測未知命令 |
+| 跨 AI 工具 adapter | 可用 | OpenCode、Pi、Gemini CLI、Codex、Claude Code |
+| 有效規範同步 | 可用 | 合併組織與 repo 規範，產生同一份根目錄 `AGENTS.md` 與 policy fingerprint |
+| Generated file 防漂移 | 可用 | `AGENTS.md` 或 managed adapter 被人工修改時停止覆寫 |
+| 靜態 delivery 驗證 | 可用 | 檢查 adapter、hash、fingerprint 與額外 context 衝突 |
+| Live delivery challenge | 可用，需外部工具 | 以 nonce、fingerprint 與抽樣 rule IDs 確認該次 agent session 收到規範 |
+| 規範理解 evaluation | 可用，live 模式需外部工具 | 用情境題確認 agent 是否做出正確決策並引用正確 rule IDs |
+| Diff-aware policy checks | 可用 | 依 Git diff 與 path scope 執行 integrity、secret、test、lint、typecheck、build checks |
+| Blocker／warning 分級 | 可用 | Blocker 失敗使用 exit code 2；warning 僅回報 |
+| 失敗原因分類 | 可用 | 區分 delivery、interpretation、execution 與 verification gap |
+| 最小化證據保存 | 可用 | 保存 digest、狀態、duration、exit code；不保存完整 prompt、reasoning 或 command output |
+| JSON 自動化介面 | 可用 | 主要命令支援 `--json`，可供後續 CI 或其他工具串接 |
+| 中央 policy 自動更新 PR | 尚未完成 | 目前只在初始化時複製並釘選指定的 organization policy |
+| OpenSpec risk gate | 尚未完成 | 尚未依變更風險要求 proposal／spec approval |
+| Waiver 管理 | 尚未完成 | 尚無到期日、owner 核准與越權檢查 |
+| PR/MR attestation 與 CI template | 尚未完成 | 目前已有底層 evidence，尚未彙整成正式 attestation |
+
+更完整的內部資料流與判定方式請閱讀
+[`docs/WORKING_LOGIC.md`](./docs/WORKING_LOGIC.md)。
+
 ## 環境需求
 
 - Node.js 18 以上，建議使用 Node.js 20
@@ -80,6 +113,63 @@ node ./bin/agent-policy-kit.js help
 
 ## 完整使用流程
 
+### 建議操作路徑
+
+第一次導入新的 repository：
+
+```bash
+cd /path/to/target-repo
+agent-policy-kit init
+
+# 完整閱讀並確認唯一的人工審查頁
+# .ai/REVIEW.md
+
+agent-policy-kit accept
+agent-policy-kit setup --tool all
+agent-policy-kit verify --tool all
+agent-policy-kit status
+```
+
+上述 `init` 只產生可確定判斷的 test、build 與 workflow 規範。若要讓 agent 分析現有
+coding style、架構、error handling 與測試慣例，初始化時指定目前可使用的工具：
+
+```bash
+agent-policy-kit init --agent gemini
+```
+
+請把 `gemini` 換成實際可用的 `codex`、`claude`、`opencode` 或 `pi`。
+
+要驗證某個實際 agent session 是否收到並理解規範：
+
+```bash
+agent-policy-kit verify --tool codex --live
+agent-policy-kit evaluate --tool codex --live
+```
+
+完成程式修改後驗證 Git diff：
+
+```bash
+agent-policy-kit check --diff HEAD~1 --tool codex
+```
+
+要修改已建立 repository 的 repo 規範：
+
+```bash
+# 修改機器來源，而不是 generated AGENTS.md 或 REVIEW.md
+$EDITOR .ai/REPO_AGENTS.proposed.md
+$EDITOR .ai/evals/cases.json
+$EDITOR .ai/evals/expected.json
+$EDITOR .ai/checks.json
+
+agent-policy-kit review
+# 重新完整閱讀 .ai/REVIEW.md
+agent-policy-kit accept --force
+agent-policy-kit setup --tool all
+```
+
+不需要每次都修改四個來源檔；只調整實際有變更的檔案即可。`review` 會重新把所有內容
+整合成一頁。請勿直接修改 `AGENTS.md`、`.ai/REVIEW.md` 或 generated adapter。
+
 ### 1. 初始化新的 repository
 
 進入目標 repository 根目錄：
@@ -96,8 +186,8 @@ agent-policy-kit init
 4. 將所有待審內容彙整到唯一需要完整閱讀的 `.ai/REVIEW.md`。
 5. 將專案標記為 `NEEDS_REVIEW`，等待 repository owner 審查。
 
-預設提案由確定性掃描產生，不需要 AI 工具。如果要讓已安裝的 agent 根據 inventory
-協助改寫草稿，必須明確指定：
+預設提案由確定性掃描產生，不需要 AI 工具。如果要讓已安裝的 agent 分析 repository
+既有 coding style 與架構慣例，必須明確指定：
 
 ```bash
 agent-policy-kit init --agent gemini
@@ -105,8 +195,23 @@ agent-policy-kit init --agent gemini
 
 可使用的值為 `opencode`、`pi`、`gemini`、`codex`、`claude`。
 
-外部 agent 執行採 best effort。若 agent 未安裝、未登入或輸出格式不符，工具會保留
-原本的確定性草稿並記錄失敗，不會自動接受 AI 產生的內容。
+工具只會抽樣 Git tracked 的設定、文件、代表性原始碼與測試，排除敏感檔名、憑證、
+binary、generated files、vendor 與大檔，並對高信心 token／secret 格式遮罩。送給 agent
+的原始碼摘錄只存在於該次 prompt；proposal agent 從暫存的空 Git repository 啟動，降低
+工具自行掃描目標 repo 的風險。以下檔案只記錄路徑、分類、hash、
+大小、截斷與遮罩統計：
+
+```text
+.ai/evidence/repository-profile.json
+```
+
+AI 新增的每條候選規範必須以反引號逐一引用 evidence bundle 中的實際檔案、標示 confidence，並提供
+compliant／non-compliant examples。純 AI 推論不得直接標記為 `MUST`。若 agent 未安裝、
+未登入、刪除確定性規範、引用不存在的檔案或輸出格式不符，工具會保留原本草稿並記錄
+`UNAVAILABLE`、`FAILED`、`INSUFFICIENT_EVIDENCE` 或 `UNVERIFIED_OUTPUT`，不會自動接受。
+
+暫存工作目錄與 prompt 指示仍不能取代作業系統 sandbox；高風險 repository 應另外限制
+agent process 的 filesystem 與 network 權限。
 
 如果公司已有組織規範，可以在初始化時指定：
 
@@ -383,6 +488,7 @@ agent-policy-kit status
 輸出包含：
 
 - canonical 與 generated 檔案狀態
+- 整合審查頁是 `CURRENT`、`STALE`、`MODIFIED`、`MISSING` 或 `ACCEPTED`
 - 目前 policy fingerprint
 - effective rule IDs
 - 每個工具的 adapter 狀態
@@ -459,6 +565,8 @@ agent-policy-kit status [--json]
 ├── policy-lock.json
 ├── generated-manifest.json
 ├── checks.json
+├── evidence/
+│   └── repository-profile.json
 ├── evals/
 │   ├── cases.json
 │   └── expected.json
@@ -482,12 +590,17 @@ MVP 使用一般 Markdown，讓所有支援的 agent 能讀取相同內容。Rul
 ### [REPO-TEST-001] 執行 repository 測試
 
 - Severity: MUST
+- Confidence: high
 - Applies to: 原始碼變更
 - Requirement: 宣告工作完成前，必須執行適用 ecosystem 的測試命令。
 - Evidence: Repository manifest、wrapper 或 CI 定義了測試方式。
 - Verification: 所有適用的測試命令必須以狀態碼 0 結束。
 - Recovery: 修復失敗，或明確記錄經核准的例外。
 ```
+
+AI 推論的新規範還必須包含 `Compliant example` 與 `Non-compliant example`，並以反引號引用 evidence
+profile 中實際抽樣的 repository-relative paths。只有 AI 推論、尚無 deterministic checker
+的規範不得直接使用 `MUST`。
 
 - 組織規範使用 `ORG-*` ID。
 - Repository 規範使用 `REPO-*` ID。
@@ -519,6 +632,9 @@ npm run lint
 - Node.js、Python、Go、Rust、Java 與 .NET ecosystem detection
 - 多語言 monorepo 的 command cwd 與 path-scoped checks
 - 缺少明確工具證據時不猜測命令
+- Evidence collector 的 tracked-only、敏感路徑排除、secret redaction 與 size budget
+- AI 候選規範的 citation、confidence、正反例、deterministic rule preservation 與 severity gate
+- AI coding convention 自動產生的 owner-reviewable comprehension cases
 - `AGENTS.md` 人工修改後的 drift protection
 - Gemini context 衝突
 - Claude managed block 保留既有內容
@@ -541,6 +657,8 @@ Live agent 測試需要帳號、認證且結果不具確定性，因此未放入
 ## 參考資料
 
 接手開發前可先閱讀工具中立的 [`docs/PROJECT_HANDOFF.md`](./docs/PROJECT_HANDOFF.md)。
+若要理解目前實作如何從掃描一路完成驗證，請閱讀
+[`docs/WORKING_LOGIC.md`](./docs/WORKING_LOGIC.md)。
 
 - [AGENTS.md](https://agents.md/)
 - [OpenCode rules](https://opencode.ai/docs/rules/)

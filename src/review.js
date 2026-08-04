@@ -11,6 +11,7 @@ const SOURCE_PATHS = [
   ".ai/inventory.json",
   ".ai/project.json",
   ".ai/policy-lock.json",
+  ".ai/init-result.json",
   ".ai/checks.json",
   ".ai/evals/cases.json",
   ".ai/evals/expected.json",
@@ -57,9 +58,11 @@ function commandText(check) {
 }
 
 function sourceState(root) {
-  const missing = SOURCE_PATHS.filter((path) => !existsSync(join(root, path)));
+  const paths = [...SOURCE_PATHS];
+  if (existsSync(join(root, ".ai/evidence/repository-profile.json"))) paths.push(".ai/evidence/repository-profile.json");
+  const missing = paths.filter((path) => !existsSync(join(root, path)));
   if (missing.length) throw new Error(`無法產生審查頁，缺少來源檔：${missing.join(", ")}`);
-  const files = SOURCE_PATHS.map((path) => ({ path, sha256: sha256(readText(root, path)) }));
+  const files = paths.map((path) => ({ path, sha256: sha256(readText(root, path)) }));
   return {
     files,
     digest: `sha256:${sha256(files.map((file) => `${file.path}:${file.sha256}`).join("\n"))}`,
@@ -118,6 +121,24 @@ function checksMarkdown(checksArtifact) {
   ].join("\n");
 }
 
+function evidenceMarkdown(profile, initResult) {
+  if (!profile) return "此 repository 沒有 evidence profile；規範提案只使用 inventory 與確定性規則。";
+  const rows = (profile.sampled_files || []).map((file) => `| ${escapeTable(file.path)} | ${escapeTable(file.category)} | ${file.bytes} | ${file.excerpt_truncated ? "是" : "否"} | ${file.redactions || 0} |`);
+  return [
+    `- Proposal agent：${initResult.agent ? `\`${initResult.agent}\`` : "未指定"}`,
+    `- Agent generation：\`${initResult.agent_generation?.status || "UNKNOWN"}\`${initResult.agent_generation?.error ? ` — ${escapeTable(initResult.agent_generation.error)}` : ""}`,
+    `- 安全抽樣檔案數：${profile.sampled_file_count || 0}`,
+    `- 傳給 agent 的字元數：${profile.sampled_content_chars || 0}`,
+    `- 高信心遮罩數：${profile.redaction_count || 0}`,
+    `- 原始碼摘錄是否保存：${profile.selection?.raw_source_persisted ? "是" : "否"}`,
+    `- 警告：${(profile.warnings || []).join("；") || "無"}`,
+    "",
+    "| Evidence file | 類型 | Bytes | 摘錄截斷 | 遮罩數 |",
+    "|---|---|---:|---|---:|",
+    ...rows,
+  ].join("\n");
+}
+
 function reviewMarkdown(root, state) {
   const inventory = readJson(root, ".ai/inventory.json");
   const project = readJson(root, ".ai/project.json");
@@ -125,6 +146,9 @@ function reviewMarkdown(root, state) {
   const cases = readJson(root, ".ai/evals/cases.json");
   const expected = readJson(root, ".ai/evals/expected.json");
   const checks = readJson(root, ".ai/checks.json");
+  const initResult = readJson(root, ".ai/init-result.json");
+  const evidencePath = join(root, ".ai/evidence/repository-profile.json");
+  const evidence = existsSync(evidencePath) ? readJson(root, ".ai/evidence/repository-profile.json") : null;
   const org = readText(root, ".ai/ORG_AGENTS.md").trim();
   const proposal = readText(root, ".ai/REPO_AGENTS.proposed.md").trim();
   const sourceLinks = state.files.map((file) => `- [${file.path}](${file.path.replace(/^\.ai\//, "")}) — \`${file.sha256}\``).join("\n");
@@ -158,6 +182,10 @@ function reviewMarkdown(root, state) {
     `- 掃描檔案數：${inventory.file_count_sampled ?? "未知"}`,
     `- Inventory 是否截斷：${inventory.inventory_truncated ? "是，必須人工確認" : "否"}`,
     `- 既有 agent 文件：${(inventory.existing_instruction_files || []).join("、") || "無"}`,
+    "",
+    "## AI Proposal Evidence",
+    "",
+    evidenceMarkdown(evidence, initResult),
     "",
     "## 組織層規範",
     "",

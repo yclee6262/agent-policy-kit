@@ -1,7 +1,7 @@
 # Agent Policy Kit 專案背景與開發交接
 
 更新日期：2026-08-04
-目前版本：`0.5.0`
+目前版本：`0.6.0`
 目前主要分支：`main`
 
 > 這是一份提供給接手開發的 AI 助手閱讀的專案背景文件，不是使用者操作手冊。
@@ -38,8 +38,8 @@ Organization 與 repository 規範是唯一需要人工維護的 canonical polic
 
 ### 2. 平台中立
 
-核心資料格式、狀態與驗證邏輯不能依賴單一 Git 平台或單一 AI provider。即使某個環境
-某個環境即使只能使用其中一種 agent，也不能移除其他工具的相容設計。
+核心資料格式、狀態與驗證邏輯不能依賴單一 Git 平台或單一 AI provider。某個環境即使
+只能使用其中一種 agent，也不能移除其他工具的相容設計。
 
 ### 3. 規範傳遞與產物驗證分離
 
@@ -74,6 +74,9 @@ Markdown 只能引導模型。Secret、破壞性命令、受保護路徑、架�
 
 ```text
 .ai/
+├── REVIEW.md
+├── review-manifest.json
+├── review-acceptance.json
 ├── ORG_AGENTS.md
 ├── REPO_AGENTS.proposed.md
 ├── REPO_AGENTS.md
@@ -82,6 +85,8 @@ Markdown 只能引導模型。Secret、破壞性命令、受保護路徑、架�
 ├── policy-lock.json
 ├── generated-manifest.json
 ├── checks.json
+├── evidence/
+│   └── repository-profile.json
 ├── evals/
 │   ├── cases.json
 │   └── expected.json
@@ -114,12 +119,16 @@ Adapter 只處理工具差異，不應複製或重新定義完整規範內容。
 ### [REPO-TEST-001] 執行 repository 測試
 
 - Severity: MUST
+- Confidence: high
 - Applies to: 原始碼變更
 - Requirement: 宣告工作完成前，必須執行 repository test。
 - Evidence: package.json 定義 test script。
 - Verification: Test command 必須成功結束。
 - Recovery: 修復失敗，或明確標記仍未驗證。
 ```
+
+AI 推論的候選規範還必須包含 `Compliant example` 與 `Non-compliant example`，引用實際
+sampled evidence paths，而且在沒有 deterministic checker 時不得直接使用 `MUST`。
 
 Organization rule 使用 `ORG-*`，repository rule 使用 `REPO-*`。Organization 規範
 優先，repository 不得重新定義或弱化 organization 規範。
@@ -208,6 +217,20 @@ Organization rule 使用 `ORG-*`，repository rule 使用 `REPO-*`。Organizatio
 - Review acceptance 保存接受前與接受後 digest，區分合法啟用轉換與後續人工 drift。
 - `status` 顯示 review packet 的 current、stale、modified、missing 或 accepted 狀態。
 
+### Version 0.6.0：Evidence-based AI proposal
+
+已完成：
+
+- `init --agent <tool>` 會分析受限 repository evidence，而不只是改寫 inventory 草稿。
+- Evidence collector 只選取 Git tracked 的設定、文件、代表性原始碼與測試。
+- 排除敏感路徑、憑證、binary、generated、vendor 與大檔，並限制檔案數與 prompt budget。
+- 高信心 private key、AWS access key、GitHub token 與 secret assignment 會先遮罩。
+- Evidence profile 不保存原始碼摘錄，只保存路徑、分類、hash、大小、截斷與遮罩統計。
+- AI candidate 必須保留 deterministic rules、引用真實 evidence、提供 confidence 與正反例。
+- 純 AI 推論不得直接成為 `MUST`；不合契約輸出會 fallback 並標記 unverified。
+- AI coding convention 可產生待 owner 審查的 comprehension cases。
+- Integrated review packet 顯示 proposal agent 與 evidence 安全摘要。
+
 ## 七、目前程式架構
 
 | 檔案 | 主要責任 |
@@ -217,14 +240,17 @@ Organization rule 使用 `ORG-*`，repository rule 使用 `REPO-*`。Organizatio
 | `src/core.js` | Repository inventory、policy、adapters、delivery、comprehension、status |
 | `src/checks.js` | Check schema、Git diff、builtins、command execution、execution diagnosis |
 | `src/review.js` | 單一審查頁、來源 digest、drift 驗證與接受證據 |
+| `src/evidence.js` | Tracked evidence 選取、budget、secret redaction 與 AI proposal prompt |
 | `src/ecosystems/` | 各語言 detector、manifest evidence、commands、cwd 與 path scope |
 | `templates/default-org-policy.md` | 預設 organization policy |
 | `templates/repo-policy-proposal.md` | Repository policy 提案範本 |
 | `test/core.test.js` | Policy、adapter、delivery、comprehension tests |
 | `test/checks.test.js` | Diff、secret、severity、approval 與 execution tests |
 | `test/ecosystems.test.js` | 多語言 detection、monorepo、wrapper 與 no-guessing tests |
+| `test/evidence.test.js` | Evidence 安全邊界、AI candidate contract 與 inferred eval tests |
 | `test/cli.test.js` | CLI machine-readable contract 與 exit code tests |
 | `README.md` | 使用者文件 |
+| `docs/WORKING_LOGIC.md` | 現行資料流、review digest、adapter 與三層驗證邏輯 |
 | `CHANGELOG.md` | 版本變更紀錄 |
 
 技術條件：
@@ -235,17 +261,35 @@ Organization rule 使用 `ORG-*`，repository rule 使用 `REPO-*`。Organizatio
 - 文件以繁體中文為主。
 - JSON 欄位、rule ID 與狀態名稱保留英文，維持自動化介面穩定。
 
-## 八、目前程式基準
+## 八、目前進度快照
 
-建立本文件前確認：
+`0.6.0` 在 2026-08-04 完成以下驗證：
 
 ```text
-Current version: 0.5.0
-Tests: run the full suite and use the latest result as the source of truth.
-Multi-language support is committed; integrated review work must be verified with git status and git log.
+Current version: 0.6.0
+Automated tests: 29 passed, 0 failed
+Syntax / lint: passed
+git diff --check: passed
+npm pack --dry-run: passed; package contains src/evidence.js and both Chinese documents
+Isolated fake-agent end-to-end proposal: passed
+Real Gemini / Codex / Claude / OpenCode / Pi proposal run: not verified
 ```
 
-如果實際 repository 狀態不同，應以目前 checkout、Git history 與測試結果為準。
+本次完成的垂直流程：
+
+```text
+Git tracked repository files
+→ Safe evidence selection and secret redaction
+→ Isolated evidence-based agent proposal
+→ Candidate contract validation
+→ Repo-specific comprehension cases
+→ Integrated REVIEW.md
+→ Owner acceptance and digest evidence
+```
+
+Fake-agent 測試驗證的是本專案自己的 command wiring、隔離 cwd、輸出解析、candidate validation
+與 artifact generation。它不代表真實 provider 的登入、CLI 版本、輸出格式或模型品質已驗證。
+若實際 repository 狀態不同，應以目前 checkout、Git history 與重新執行的測試結果為準。
 
 ## 九、已知限制
 
@@ -263,7 +307,7 @@ Multi-language support is committed; integrated review work must be verified wit
 
 ## 十、下一階段目標：PR Attestation
 
-下一個建議版本為 `0.6.0`。目標是把目前分散的執行證據整合為一份可供 CI 與 reviewer
+下一個建議版本為 `0.7.0`。目標是把目前分散的執行證據整合為一份可供 CI 與 reviewer
 判讀的 attestation。
 
 ### Attestation 應整合的資訊
@@ -331,7 +375,7 @@ test/attestation.test.js
 - Machine-readable schema 穩定。
 - 有完整正反測試。
 - README 與 CHANGELOG 更新。
-- 版本提升到 `0.6.0`。
+- 版本提升到 `0.7.0`。
 
 ## 十一、後續 roadmap
 
@@ -375,6 +419,7 @@ Canonical policy
 → Diff-aware deterministic checks
 → Multi-language ecosystem detection
 → Integrated single-file review packet
+→ Evidence-based AI coding convention proposal
 ```
 
 下一步要完成：
