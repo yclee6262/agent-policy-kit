@@ -152,3 +152,37 @@ test("can initialize checks for a repository created by an older release", async
   const accepted = acceptCheckSuite(root);
   assert.equal(accepted.status, "ACTIVE");
 });
+
+test("runs only checks whose ecosystem paths match a monorepo diff", async (context) => {
+  const root = await repository({
+    "web/package.json": JSON.stringify({ scripts: { test: "placeholder" } }),
+    "web/app.js": "export const web = true;\n",
+    "services/api/go.mod": "module example.invalid/api\n",
+    "services/api/main.go": "package main\n",
+  });
+  context.after(() => rm(root, { recursive: true, force: true }));
+  initProject(root);
+  acceptProposal(root);
+  const path = join(root, ".ai", "checks.json");
+  const config = readJson(path);
+  const firstCommand = config.checks.find((item) => item.type === "command");
+  const originalCwd = firstCommand.cwd;
+  firstCommand.cwd = "../outside";
+  writeJson(path, config);
+  assert.throws(() => acceptCheckSuite(root), /cwd 不存在、位於 repository 外/);
+  firstCommand.cwd = originalCwd;
+  for (const check of config.checks.filter((item) => item.type === "command")) {
+    check.command = [process.execPath, "-e", "process.exit(0)"];
+  }
+  writeJson(path, config);
+  acceptCheckSuite(root);
+  writeFileSync(join(root, "services/api/main.go"), "package main\n// changed\n", "utf8");
+
+  const result = runPolicyChecks(root, { diff: "HEAD" });
+  const nodeChecks = result.checks.filter((item) => item.id.includes("NODE"));
+  const goChecks = result.checks.filter((item) => item.id.includes("GO"));
+  assert.ok(nodeChecks.length > 0);
+  assert.ok(nodeChecks.every((item) => item.status === "SKIPPED"));
+  assert.equal(goChecks.length, 2);
+  assert.ok(goChecks.every((item) => item.status === "PASSED"));
+});

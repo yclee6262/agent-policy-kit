@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 
 const ALLOWED_SEVERITIES = new Set(["blocker", "warning", "advisory"]);
 const ALLOWED_BUILTINS = new Set(["policy-integrity", "secret-diff"]);
@@ -62,6 +62,20 @@ function packageCommand(inventory, script) {
   return ["npm", "run", script];
 }
 
+function checkIdFor(detected, counts) {
+  if (detected.ecosystem === "node" && detected.ecosystem_root === "." && counts[detected.kind] === 1) {
+    return `CHECK-REPO-${detected.kind.toUpperCase()}`;
+  }
+  const root = detected.ecosystem_root === "." ? "ROOT" : detected.ecosystem_root;
+  return ["CHECK", detected.ecosystem, detected.kind, root, detected.variant]
+    .filter(Boolean)
+    .join("-")
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/-$/, "");
+}
+
 export function createCheckArtifacts(inventory, org, repo) {
   const ruleIds = new Set([...extractRuleIds(org), ...extractRuleIds(repo)]);
   const checks = [];
@@ -85,24 +99,45 @@ export function createCheckArtifacts(inventory, org, repo) {
       when: ["**"],
     });
   }
-  const scripts = inventory.package && inventory.package.scripts ? inventory.package.scripts : {};
-  const definitions = [
-    ["test", "CHECK-REPO-TEST", "REPO-TEST-001", "blocker"],
-    ["lint", "CHECK-REPO-LINT", "REPO-QUALITY-001", "warning"],
-    ["typecheck", "CHECK-REPO-TYPECHECK", "REPO-TYPE-001", "warning"],
-    ["build", "CHECK-REPO-BUILD", "REPO-BUILD-001", "warning"],
-  ];
-  for (const [script, id, ruleId, severity] of definitions) {
-    if (typeof scripts[script] !== "string" || !ruleIds.has(ruleId)) continue;
+  const ruleForKind = {
+    test: "REPO-TEST-001",
+    lint: "REPO-QUALITY-001",
+    typecheck: "REPO-TYPE-001",
+    build: "REPO-BUILD-001",
+  };
+  let detectedCommands = (inventory.ecosystems || []).flatMap((item) =>
+    (item.commands || []).map((detected) => ({ ...detected, ecosystem: item.id, ecosystem_root: item.root })),
+  );
+  if (!detectedCommands.length) {
+    const scripts = inventory.package && inventory.package.scripts ? inventory.package.scripts : {};
+    detectedCommands = Object.keys(ruleForKind)
+      .filter((kind) => typeof scripts[kind] === "string")
+      .map((kind) => ({
+        kind,
+        argv: packageCommand(inventory, kind),
+        cwd: ".",
+        when: ["**"],
+        evidence: [`package.json scripts.${kind}`],
+        ecosystem: "node",
+        ecosystem_root: ".",
+      }));
+  }
+  const counts = detectedCommands.reduce((result, item) => ({ ...result, [item.kind]: (result[item.kind] || 0) + 1 }), {});
+  for (const detected of detectedCommands) {
+    const ruleId = ruleForKind[detected.kind];
+    if (!ruleId || !ruleIds.has(ruleId)) continue;
     checks.push({
-      id,
+      id: checkIdFor(detected, counts),
       rule_ids: [ruleId],
-      severity,
+      severity: detected.kind === "test" ? "blocker" : "warning",
       type: "command",
-      command: packageCommand(inventory, script),
-      when: ["**"],
+      command: detected.argv,
+      cwd: detected.cwd || ".",
+      when: detected.when && detected.when.length ? detected.when : ["**"],
       timeout_ms: 120000,
-      evidence: `package.json scripts.${script}`,
+      evidence: detected.evidence || [],
+      ecosystem: detected.ecosystem,
+      confidence: detected.confidence || "confirmed",
     });
   }
   return {
@@ -157,6 +192,16 @@ function validateCheckSuite(root, artifact, manifest, options = {}) {
       }
       if (check.timeout_ms !== undefined && (!Number.isInteger(check.timeout_ms) || check.timeout_ms < 1000 || check.timeout_ms > 900000)) {
         throw new Error(`${check.id} 的 timeout_ms 必須介於 1000 與 900000。`);
+      }
+      const cwd = check.cwd || ".";
+      if (typeof cwd !== "string" || isAbsolute(cwd)) throw new Error(`${check.id} 的 cwd 必須是 repository 內的相對路徑。`);
+      try {
+        const rootReal = realpathSync(root);
+        const cwdReal = realpathSync(join(root, cwd));
+        const fromRoot = relative(rootReal, cwdReal);
+        if (fromRoot.startsWith("..") || isAbsolute(fromRoot)) throw new Error("outside repository");
+      } catch {
+        throw new Error(`${check.id} 的 cwd 不存在、位於 repository 外，或無法安全解析：${cwd}`);
       }
     } else {
       throw new Error(`${check.id} 使用未知 type：${check.type}`);
@@ -296,10 +341,10 @@ function secretDiff(root, patch, untrackedFiles) {
 }
 
 function runCommand(root, check, dryRun) {
-  if (dryRun) return { passed: true, status: "PLANNED", command: check.command };
+  if (dryRun) return { passed: true, status: "PLANNED", command: check.command, cwd: check.cwd || "." };
   const started = Date.now();
   const result = spawnSync(check.command[0], check.command.slice(1), {
-    cwd: root,
+    cwd: join(root, check.cwd || "."),
     encoding: "utf8",
     timeout: check.timeout_ms || 120000,
     maxBuffer: 20 * 1024 * 1024,
@@ -311,6 +356,7 @@ function runCommand(root, check, dryRun) {
     passed,
     status: passed ? "PASSED" : "FAILED",
     command: check.command,
+    cwd: check.cwd || ".",
     exit_code: result.status,
     signal: result.signal,
     duration_ms: Date.now() - started,

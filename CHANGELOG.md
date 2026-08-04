@@ -1,5 +1,19 @@
 # 變更紀錄
 
+## 0.4.0
+
+- 新增 ecosystem detector registry，正式支援 Node.js、Python、Go、Rust、Java Maven、Java Gradle 與 .NET 專案。
+- Inventory 新增向下相容的 `ecosystems` 欄位，記錄 manifest、root、commands、evidence、confidence 與 path scope。
+- 支援同一 repository 同時偵測多個語言與多個子專案。
+- 自動產生 ecosystem-aware repository rules 與 deterministic checks。
+- Command check 新增受限制的 repository-relative `cwd`，禁止解析至 repository 外部。
+- Node.js 支援 npm、pnpm、Yarn 與 Bun，優先採用 `packageManager` 或 lockfile 證據。
+- Python 只有在 pytest、tox、nox、Ruff 或 mypy 有明確設定／dependency 證據時才產生命令。
+- Maven／Gradle 優先使用 repository wrapper；Go、Rust 與 .NET 產生標準 toolchain checks。
+- Monorepo checks 只在對應 ecosystem path 發生變更時執行。
+- 保留既有 `package` inventory 與 Node.js check IDs，避免破壞舊 repository。
+- 將開發交接文件改為工具中立的 `docs/PROJECT_HANDOFF.md`，不指定由特定 agent 接手。
+
 ## 0.3.0
 
 - 新增 `check --diff <git-ref>`，依 Git diff 執行已核准的 deterministic checks。

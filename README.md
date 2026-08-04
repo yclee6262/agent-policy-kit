@@ -39,6 +39,29 @@ Markdown 只能引導模型行為，不是安全邊界。Secrets、破壞性命�
 
 CLI 沒有 npm runtime dependency。
 
+## 支援的專案語言與 ecosystem
+
+Agent Policy Kit 本身以 Node.js 開發，但被治理的目標 repository 不限 JavaScript。
+目前可以自動偵測：
+
+| Ecosystem | 主要證據 | 可自動產生的 checks |
+|---|---|---|
+| Node.js | `package.json`、package manager、lockfile | test、lint、typecheck、build scripts |
+| Python | `pyproject.toml`、requirements、tox、nox、pytest config | pytest／tox／nox、Ruff、mypy |
+| Go | `go.mod` | `go test ./...`、`go vet ./...` |
+| Rust | `Cargo.toml` | cargo test、fmt、clippy |
+| Java Maven | `pom.xml`、`mvnw` | Maven test，優先使用 wrapper |
+| Java Gradle | `build.gradle*`、`gradlew` | Gradle test，優先使用 wrapper |
+| .NET | `.sln`、`.csproj`、`.fsproj` | `dotnet test` |
+
+Inventory 以 `ecosystems` array 保存每個子專案的 root、manifest、command、evidence、
+confidence 與 path scope，因此同一個 monorepo 可以同時包含多種語言。既有的 `package`
+欄位仍保留，以維持舊版 Node.js repository 相容性。
+
+工具只會根據明確證據產生命令。例如只有看到一般 `pyproject.toml`，但沒有 pytest、
+tox 或 nox 證據時，不會猜測 test runner。所有自動命令仍必須由 repository owner 在
+`.ai/checks.json` 中審查後才能啟用。
+
 ## 開發版本安裝
 
 在本 repository 執行：
@@ -445,9 +468,9 @@ MVP 使用一般 Markdown，讓所有支援的 agent 能讀取相同內容。Rul
 
 - Severity: MUST
 - Applies to: 原始碼變更
-- Requirement: 宣告工作完成前，必須執行 `npm test`。
-- Evidence: `package.json` 定義了 test script。
-- Verification: `npm test` 必須以狀態碼 0 結束。
+- Requirement: 宣告工作完成前，必須執行適用 ecosystem 的測試命令。
+- Evidence: Repository manifest、wrapper 或 CI 定義了測試方式。
+- Verification: 所有適用的測試命令必須以狀態碼 0 結束。
 - Recovery: 修復失敗，或明確記錄經核准的例外。
 ```
 
@@ -478,6 +501,9 @@ npm run lint
 - Tracked 與 untracked secret detection
 - Matching comprehension evidence 下的 execution failure 分類
 - Checks 或 policy 變更後要求重新核准
+- Node.js、Python、Go、Rust、Java 與 .NET ecosystem detection
+- 多語言 monorepo 的 command cwd 與 path-scoped checks
+- 缺少明確工具證據時不猜測命令
 - `AGENTS.md` 人工修改後的 drift protection
 - Gemini context 衝突
 - Claude managed block 保留既有內容
@@ -498,6 +524,8 @@ Live agent 測試需要帳號、認證且結果不具確定性，因此未放入
   屬於下一階段。
 
 ## 參考資料
+
+接手開發前可先閱讀工具中立的 [`docs/PROJECT_HANDOFF.md`](./docs/PROJECT_HANDOFF.md)。
 
 - [AGENTS.md](https://agents.md/)
 - [OpenCode rules](https://opencode.ai/docs/rules/)
